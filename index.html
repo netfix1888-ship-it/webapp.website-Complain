@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="th"><head><base target="_top"><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root,[data-t=mint]{--bg:#f1faf5;--card:#fff;--ink:#2b3a35;--mut:#6f827b;--pri:#a8e0c1;--pri2:#4fb283;--line:#e0f0e7}
+[data-t=pink]{--bg:#fff4f8;--pri:#fbc1d3;--pri2:#e57a9d;--line:#fbe0e8}
+[data-t=peach]{--bg:#fff7ee;--pri:#ffd3a8;--pri2:#ee9440;--line:#fde8d3}
+[data-t=night]{--bg:#1d2130;--card:#292e42;--ink:#f1f2f8;--mut:#aab0c6;--pri:#6fc9a0;--pri2:#a8e6cf;--line:#3a4058}
+body{font-family:'Prompt',sans-serif;background:var(--bg);color:var(--ink);transition:.3s}
+.card{background:var(--card);border-radius:22px;box-shadow:0 8px 26px rgba(80,100,90,.10);border:1px solid var(--line);transition:.25s}
+.hv:hover{transform:translateY(-4px);box-shadow:0 14px 30px rgba(80,100,90,.18);cursor:pointer}
+.btn{background:var(--pri);color:#23332c;padding:.55rem 1.1rem;border-radius:14px;font-weight:500;transition:.2s;display:inline-flex;gap:.4rem;align-items:center}
+.btn:hover{transform:translateY(-2px) scale(1.03);filter:brightness(.96)}.btn:active{transform:scale(.97)}
+.btn2{background:transparent;border:1.5px solid var(--pri2);color:var(--pri2)}
+.in{width:100%;padding:.6rem .9rem;border-radius:14px;border:1.5px solid var(--line);background:var(--card);color:var(--ink);outline:0}
+.in:focus{border-color:var(--pri2)}
+.s0{background:#ffd3d3;color:#9b2323}.s1{background:#ffddba;color:#8f4700}.s2{background:#fff0a8;color:#6f5a00}.s3{background:#c9f2d8;color:#14603a}
+.tag{padding:.15rem .7rem;border-radius:99px;font-size:.78rem;font-weight:500;white-space:nowrap}
+.nav a{padding:.45rem .9rem;border-radius:14px;cursor:pointer;white-space:nowrap;transition:.2s}.nav a:hover,.nav a.on{background:var(--pri);color:#23332c}
+.fade{animation:f .35s ease}@keyframes f{from{opacity:0;transform:translateY(8px)}to{opacity:1}}
+.bob{animation:b 3s ease-in-out infinite}@keyframes b{50%{transform:translateY(-8px)}}
+.modal{position:fixed;inset:0;background:#0006;display:flex;align-items:center;justify-content:center;padding:1rem;z-index:50}
+.modal>div{max-height:92vh;overflow:auto;width:100%;max-width:680px}
+@media print{body *{visibility:hidden}#rpt,#rpt *{visibility:visible}#rpt{position:absolute;left:0;top:0;width:100%}}
+</style></head>
+<body data-t="mint"><div id="app" class="max-w-6xl mx-auto p-3 sm:p-6"></div><div id="md"></div>
+<div id="toast" class="fixed bottom-5 left-1/2 -translate-x-1/2 card px-5 py-3 hidden z-[60]"></div>
+<script>
+const ST=['รับเรื่องใหม่','กำลังดำเนินการ','รอข้อมูลเพิ่มเติม','เสร็จสิ้น'],PR=['ด่วนมาก','สูง','ปกติ','ต่ำ'],PC=['s0','s1','s2','s3'];
+const CAT=['🏢 อาคารสถานที่','🦺 ความปลอดภัย','🤝 พฤติกรรม/การคุกคาม','💰 เงินเดือน/สวัสดิการ','💻 ระบบ IT/อุปกรณ์','🍱 โรงอาหาร/สุขอนามัย','📌 อื่นๆ'];
+const S={user:null,token:null,cases:[],view:'dash',F:{},pub:'new'};
+const $=(q)=>document.querySelector(q),esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const run=(fn,...a)=>new Promise((ok,no)=>google.script.run.withSuccessHandler(r=>r&&r.error?no(r.error):ok(r)).withFailureHandler(e=>no(e.message)).api(fn,S.token,a));
+const toast=m=>{const t=$('#toast');t.textContent=m;t.classList.remove('hidden');clearTimeout(t.k);t.k=setTimeout(()=>t.classList.add('hidden'),3200)};
+const dt=i=>i?new Date(i).toLocaleString('th-TH',{dateStyle:'medium',timeStyle:'short'}):'-';
+const sTag=s=>`<span class="tag s${ST.indexOf(s)}">${esc(s)}</span>`,pTag=p=>`<span class="tag s${PR.indexOf(p)}">${esc(p)}</span>`;
+const imgs=s=>String(s||'').split(',').filter(Boolean).map(u=>`<a href="${u}" target="_blank"><img src="${u}" class="h-28 w-28 object-cover rounded-2xl inline-block mr-2 mb-2"></a>`).join('')||'<span class="text-sm" style="color:var(--mut)">ไม่มีรูป</span>';
+const rs=f=>new Promise(r=>{const i=new Image,fr=new FileReader;fr.onload=e=>{i.onload=()=>{const k=Math.min(1,1000/Math.max(i.width,i.height)),c=document.createElement('canvas');c.width=i.width*k;c.height=i.height*k;c.getContext('2d').drawImage(i,0,0,c.width,c.height);r(c.toDataURL('image/jpeg',.75))};i.src=e.target.result};fr.readAsDataURL(f)});
+async function pick(id,prev){const f=[...$('#'+id).files].slice(0,3),o=[];for(const x of f)o.push(await rs(x));$('#'+prev).innerHTML=o.map(u=>`<img src="${u}" class="h-20 w-20 object-cover rounded-xl inline-block mr-2">`).join('');return o}
+const PICK={};
+const fileIn=(id)=>`<input type="file" id="${id}" accept="image/*" multiple class="in" onchange="pick('${id}','${id}p').then(r=>PICK['${id}']=r)"><div id="${id}p" class="mt-2"></div>`;
+function theme(t){document.body.dataset.t=t;try{localStorage.t=t}catch(e){}}
+try{theme(localStorage.t||'mint')}catch(e){}
+const themeBar=()=>`<div class="flex gap-1.5 items-center">${[['mint','#a8e0c1'],['pink','#fbc1d3'],['peach','#ffd3a8'],['night','#292e42']].map(([k,c])=>`<button title="${k}" onclick="theme('${k}')" class="w-6 h-6 rounded-full border-2 border-white shadow hover:scale-125 transition" style="background:${c}"></button>`).join('')}</div>`;
+const ill=`<svg viewBox="0 0 220 160" class="bob w-full max-w-[260px]"><ellipse cx="110" cy="146" rx="80" ry="8" fill="#0001"/><rect x="40" y="34" width="110" height="78" rx="22" fill="#a8e0c1"/><path d="M70 112l-4 26 28-26z" fill="#a8e0c1"/><circle cx="76" cy="73" r="7" fill="#fff"/><circle cx="96" cy="73" r="7" fill="#fff"/><circle cx="116" cy="73" r="7" fill="#fff"/><rect x="130" y="14" width="64" height="52" rx="18" fill="#ffd3a8"/><path d="M175 66l8 18-24-18z" fill="#ffd3a8"/><path d="M148 40l9 9 16-18" stroke="#fff" stroke-width="6" fill="none" stroke-linecap="round"/><circle cx="30" cy="30" r="8" fill="#fbc1d3"/><circle cx="196" cy="100" r="6" fill="#fff0a8"/></svg>`;
+
+/* ---------- PUBLIC ---------- */
+function render(){S.user?appView():pubView()}
+function pubView(){
+ const t=S.pub;
+ $('#app').innerHTML=`<div class="flex flex-wrap justify-between items-center gap-3 mb-5"><div class="text-xl font-semibold">💬 ศูนย์รับเรื่องร้องเรียน</div>${themeBar()}</div>
+ <div class="card p-6 grid md:grid-cols-2 gap-4 items-center mb-5 fade"><div><h1 class="text-2xl sm:text-3xl font-semibold mb-2">เสียงของคุณสำคัญกับเรา 🌿</h1><p style="color:var(--mut)" class="mb-4">แจ้งปัญหาได้อย่างปลอดภัย เลือกไม่ระบุตัวตนได้ และติดตามสถานะด้วยเลขที่เรื่อง</p>
+ <div class="flex flex-wrap gap-2"><button class="btn ${t=='new'?'':'btn2'}" onclick="S.pub='new';render()">✏️ แจ้งเรื่อง</button><button class="btn ${t=='trk'?'':'btn2'}" onclick="S.pub='trk';render()">🔎 ติดตามสถานะ</button><button class="btn ${t=='login'?'':'btn2'}" onclick="S.pub='login';render()">🔐 เจ้าหน้าที่</button></div></div><div class="flex justify-center">${ill}</div></div>
+ <div class="card p-5 sm:p-6 fade" id="pb"></div>`;
+ ({new:formView,trk:trkView,login:loginView})[t]();
+}
+function formView(){$('#pb').innerHTML=`<h2 class="font-semibold text-lg mb-3">✏️ แจ้งเรื่องใหม่</h2><div class="grid sm:grid-cols-2 gap-3">
+ <label>หมวดหมู่<select id="fc" class="in">${CAT.map(c=>`<option>${c}</option>`).join('')}</select></label>
+ <label>ความเร่งด่วน<select id="fp" class="in">${PR.map(c=>`<option ${c=='ปกติ'?'selected':''}>${c}</option>`).join('')}</select></label>
+ <label class="sm:col-span-2">หัวข้อ *<input id="fs" class="in"></label><label class="sm:col-span-2">รายละเอียด *<textarea id="fd" rows="4" class="in"></textarea></label>
+ <label>สถานที่/แผนก<input id="fl" class="in"></label><label class="flex items-center gap-2 mt-6"><input type="checkbox" id="fa" onchange="$('#idb').style.display=this.checked?'none':'grid'"> 🕶️ ไม่ระบุตัวตน</label>
+ <div id="idb" class="sm:col-span-2 grid sm:grid-cols-2 gap-3"><label>ชื่อผู้แจ้ง<input id="fr" class="in"></label><label>อีเมล/เบอร์ติดต่อ (รับแจ้งเตือนทางอีเมล)<input id="fk" class="in"></label></div>
+ <div class="sm:col-span-2">📷 รูปภาพก่อนแก้ไข (สูงสุด 3 รูป)${fileIn('fb')}</div></div><button class="btn mt-4" onclick="send()">🚀 ส่งเรื่อง</button>`;PICK.fb=[]}
+async function send(){const g=i=>$('#'+i).value.trim();if(!g('fs')||!g('fd'))return toast('กรอกหัวข้อและรายละเอียด');
+ toast('กำลังส่ง...');try{const r=await run('submit',{category:g('fc'),priority:g('fp'),subject:g('fs'),detail:g('fd'),location:g('fl'),anonymous:$('#fa').checked,reporter:g('fr'),contact:g('fk'),before:PICK.fb});
+ $('#pb').innerHTML=`<div class="text-center py-8"><div class="text-5xl mb-2">🎉</div><div class="text-lg">ส่งเรื่องเรียบร้อย เลขที่เรื่องของคุณ</div><div class="text-3xl font-semibold my-3 select-all" style="color:var(--pri2)">${r.id}</div><p style="color:var(--mut)">กรุณาจดไว้เพื่อติดตามสถานะ</p><button class="btn mt-4" onclick="S.pub='trk';render();$('#ti').value='${r.id}'">🔎 ติดตามเรื่องนี้</button></div>`}catch(e){toast(e)}}
+function trkView(){$('#pb').innerHTML=`<h2 class="font-semibold text-lg mb-3">🔎 ติดตามสถานะ</h2><div class="flex gap-2"><input id="ti" class="in" placeholder="เช่น CP261030-1234"><button class="btn" onclick="trk()">ค้นหา</button></div><div id="tr" class="mt-4"></div>`}
+async function trk(){try{const r=await run('track',$('#ti').value);$('#tr').innerHTML=detail(r.c,r.tl)}catch(e){toast(e)}}
+function detail(c,tl){const i=ST.indexOf(c.status);return `<div class="fade"><div class="flex flex-wrap justify-between gap-2"><div class="font-semibold text-lg">${esc(c.subject)}</div>${sTag(c.status)}</div>
+ <div class="text-sm mb-3" style="color:var(--mut)">${esc(c.id)} • ${esc(c.category)} • ${pTag(c.priority)} • ${dt(c.createdAt)}</div>
+ <div class="flex gap-1 my-3">${ST.map((s,k)=>`<div class="flex-1 text-center text-xs"><div class="h-2 rounded-full mb-1" style="background:${k<=i?'var(--pri2)':'var(--line)'}"></div>${s}</div>`).join('')}</div>
+ <p class="mb-3 whitespace-pre-wrap">${esc(c.detail)}</p><div class="grid sm:grid-cols-2 gap-3 mb-3"><div><b>📷 ก่อน</b><br>${imgs(c.beforeImg)}</div><div><b>✨ หลัง</b><br>${imgs(c.afterImg)}</div></div>
+ ${c.resolution?`<div class="s3 rounded-2xl p-3 mb-3">✅ ผลการแก้ไข: ${esc(c.resolution)}</div>`:''}
+ <b>ไทม์ไลน์</b><div class="mt-2 border-l-2 pl-4 space-y-2" style="border-color:var(--pri2)">${tl.map(t=>`<div><div class="text-sm" style="color:var(--mut)">${dt(t.time)} • ${esc(t.by)}</div>${sTag(t.status)} ${esc(t.note)}</div>`).join('')}</div></div>`}
+function loginView(){$('#pb').innerHTML=`<h2 class="font-semibold text-lg mb-3">🔐 เข้าสู่ระบบเจ้าหน้าที่</h2><div class="max-w-sm space-y-3"><input id="lu" class="in" placeholder="ชื่อผู้ใช้"><input id="lp" type="password" class="in" placeholder="รหัสผ่าน" onkeydown="if(event.key=='Enter')doLogin()"><button class="btn" onclick="doLogin()">เข้าสู่ระบบ</button><p class="text-xs" style="color:var(--mut)">ใส่รหัสผิดครบ 3 ครั้ง บัญชีจะถูกล็อก 15 นาที</p></div>`}
+async function doLogin(){try{const r=await run('login',$('#lu').value,$('#lp').value);S.token=r.token;S.user=r.user;S.view='dash';await load();render()}catch(e){toast(e)}}
+async function load(){S.cases=await run('list')}
+
+/* ---------- APP ---------- */
+const isA=()=>S.user.role=='admin';
+function appView(){
+ const tabs=[['dash','📊 แดชบอร์ด'],['cases','📋 รายการเรื่อง'],['rep','📑 รายงาน'],...(isA()?[['usr','👥 ผู้ใช้งาน'],['set','⚙️ ตั้งค่า']]:[])];
+ $('#app').innerHTML=`<div class="card p-3 mb-5 flex flex-wrap items-center gap-3 justify-between"><div class="font-semibold">💬 ระบบร้องเรียน</div><div class="nav flex gap-1 overflow-x-auto max-w-full">${tabs.map(([k,l])=>`<a class="${S.view==k?'on':''}" onclick="go('${k}')">${l}</a>`).join('')}</div>
+ <div class="flex items-center gap-3">${themeBar()}<span class="text-sm">${esc(S.user.name)}</span><button class="btn btn2" onclick="run('logout');S.user=null;S.token=null;S.pub='login';render()">ออก</button></div></div><div id="vw" class="fade"></div>`;
+ ({dash:dashView,cases:casesView,rep:repView,usr:usrView,set:setView})[S.view]()}
+function go(v,f){S.view=v;if(f)S.F=f;else if(v!='cases')S.F={};appView()}
+const C={};const kill=()=>Object.values(C).forEach(c=>c.destroy());
+function dashView(){kill();const cs=S.cases,n=s=>cs.filter(c=>c.status==s).length;
+ const cards=[['📥','ทั้งหมด',cs.length,'s3',{}],...ST.map((s,i)=>[['🆕','🛠️','⏳','✅'][i],s,n(s),'s'+i,{status:s}])];
+ const bg=['#ffb3b3','#ffcf9e','#ffe680','#a8e0c1'];
+ $('#vw').innerHTML=`<div class="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-4">${cards.map(([ic,l,v,k,f],i)=>`<div class="card hv p-4" onclick='go("cases",${JSON.stringify(f)})'><div class="w-11 h-11 rounded-2xl flex items-center justify-center text-2xl mb-2 ${i?k:'s3'}" style="${i?'':'background:#d6e8ff'}">${ic}</div><div class="text-3xl font-semibold">${v}</div><div class="text-sm" style="color:var(--mut)">${l}</div></div>`).join('')}</div>
+ <div class="grid md:grid-cols-3 gap-4"><div class="card p-4"><b>สถานะ</b><canvas id="c1"></canvas></div><div class="card p-4"><b>หมวดหมู่</b><canvas id="c2"></canvas></div><div class="card p-4"><b>ความเร่งด่วน</b><canvas id="c3"></canvas></div></div>
+ <div class="card p-4 mt-4"><b>เรื่องล่าสุด</b><div class="mt-2 space-y-2">${cs.slice(0,5).map(row).join('')||'<p style="color:var(--mut)">ยังไม่มีข้อมูล</p>'}</div></div>`;
+ const mk=(id,type,labels,data,colors,key)=>C[id]=new Chart($('#'+id),{type,data:{labels,datasets:[{data,backgroundColor:colors,borderRadius:8,borderWidth:0}]},options:{plugins:{legend:{display:type=='doughnut',labels:{color:getComputedStyle(document.body).color}}},scales:type=='bar'?{x:{ticks:{color:'#888'}},y:{ticks:{precision:0,color:'#888'},beginAtZero:true}}:{},onClick:(e,el)=>{if(el.length)go('cases',{[key]:labels[el[0].index]})},onHover:(e,el)=>e.native.target.style.cursor=el.length?'pointer':'default'}});
+ mk('c1','doughnut',ST,ST.map(n),bg,'status');mk('c2','bar',CAT,CAT.map(c=>cs.filter(x=>x.category==c).length),'#a8e0c1','category');mk('c3','bar',PR,PR.map(p=>cs.filter(x=>x.priority==p).length),bg,'priority');
+ C.c2.options.scales.x.ticks.callback=function(v){return this.getLabelForValue(v).slice(0,2)}}
+const row=c=>`<div class="flex flex-wrap items-center justify-between gap-2 p-3 rounded-2xl hv" style="background:var(--bg)" onclick="open_('${c.id}')"><div><div class="font-medium">${esc(c.subject)}</div><div class="text-xs" style="color:var(--mut)">${c.id} • ${esc(c.category)} • ${dt(c.createdAt)}</div></div><div class="flex gap-1">${pTag(c.priority)}${sTag(c.status)}</div></div>`;
+function filt(){const F=S.F,q=(F.q||'').toLowerCase();return S.cases.filter(c=>(!F.status||c.status==F.status)&&(!F.category||c.category==F.category)&&(!F.priority||c.priority==F.priority)&&(!q||(c.subject+c.id+c.detail+c.reporter).toLowerCase().includes(q)))}
+function casesView(){const F=S.F;$('#vw').innerHTML=`<div class="card p-4 mb-3"><div class="grid sm:grid-cols-4 gap-2"><input class="in sm:col-span-2" placeholder="🔍 ค้นหา" value="${esc(F.q||'')}" oninput="S.F.q=this.value;list_()">
+ <select class="in" onchange="S.F.status=this.value;list_()"><option value="">ทุกสถานะ</option>${ST.map(s=>`<option ${F.status==s?'selected':''}>${s}</option>`).join('')}</select>
+ <select class="in" onchange="S.F.priority=this.value;list_()"><option value="">ทุกความเร่งด่วน</option>${PR.map(s=>`<option ${F.priority==s?'selected':''}>${s}</option>`).join('')}</select></div>
+ <div class="mt-2 flex flex-wrap gap-2 items-center">${F.category?`<span class="tag s3">${esc(F.category)} ✕</span>`:''}<button class="btn btn2 !py-1" onclick="S.F={};casesView()">ล้างตัวกรอง</button><span id="cn" class="text-sm" style="color:var(--mut)"></span></div></div><div id="cl" class="space-y-2"></div>`;list_()}
+function list_(){const l=filt();$('#cn').textContent=l.length+' รายการ';$('#cl').innerHTML=l.map(row).join('')||'<div class="card p-8 text-center">🍃 ไม่พบข้อมูล</div>'}
+async function open_(id){const r=await run('track',id).catch(e=>toast(e));if(!r)return;const c=S.cases.find(x=>x.id==id)||r.c,can=S.user.role!='viewer';
+ $('#md').innerHTML=`<div class="modal" onclick="if(event.target==this)this.remove()"><div class="card p-5 fade">${detail(r.c,r.tl)}
+ <div class="mt-3 text-sm" style="color:var(--mut)">👤 ${esc(c.reporter)} ${esc(c.contact)}</div>
+ ${can?`<div class="mt-4 pt-4 border-t grid sm:grid-cols-2 gap-2" style="border-color:var(--line)"><select id="us" class="in">${ST.map(s=>`<option ${c.status==s?'selected':''}>${s}</option>`).join('')}</select><input id="ua" class="in" placeholder="ผู้รับผิดชอบ" value="${esc(c.assignee)}"><textarea id="un" class="in sm:col-span-2" rows="2" placeholder="บันทึก/ผลการแก้ไข"></textarea><div class="sm:col-span-2">✨ รูปหลังแก้ไข${fileIn('fa2')}</div><button class="btn" onclick="upd('${id}')">💾 บันทึก</button></div>`:''}
+ <button class="btn btn2 mt-3" onclick="$('#md').innerHTML=''">ปิด</button></div></div>`;PICK.fa2=[]}
+async function upd(id){try{await run('update',{id,status:$('#us').value,assignee:$('#ua').value,note:$('#un').value,after:PICK.fa2});toast('บันทึกแล้ว ✅');$('#md').innerHTML='';await load();appView()}catch(e){toast(e)}}
+
+/* ---------- REPORT ---------- */
+function repView(){const d=new Date(),f=new Date(d.getFullYear(),d.getMonth(),1).toISOString().slice(0,10);
+ $('#vw').innerHTML=`<div class="card p-4 mb-3 flex flex-wrap gap-2 items-end"><label>จาก<input id="r1" type="date" class="in" value="${f}" onchange="repCalc()"></label><label>ถึง<input id="r2" type="date" class="in" value="${d.toISOString().slice(0,10)}" onchange="repCalc()"></label><button class="btn" onclick="xl()">📗 Excel</button><button class="btn" onclick="window.print()">📕 PDF / พิมพ์</button></div><div id="rpt" class="card p-5"></div>`;repCalc()}
+let RL=[];
+function repCalc(){const a=new Date($('#r1').value),b=new Date($('#r2').value+'T23:59:59');RL=S.cases.filter(c=>{const t=new Date(c.createdAt);return t>=a&&t<=b});
+ const done=RL.filter(c=>c.status=='เสร็จสิ้น'),avg=done.length?(done.reduce((s,c)=>s+(new Date(c.updatedAt)-new Date(c.createdAt)),0)/done.length/864e5).toFixed(1):'-';
+ const tb=(L,k)=>`<table class="w-full text-sm mb-4">${L.map(x=>`<tr class="border-b" style="border-color:var(--line)"><td class="py-1">${x}</td><td class="text-right">${RL.filter(c=>c[k]==x).length}</td></tr>`).join('')}</table>`;
+ $('#rpt').innerHTML=`<h2 class="text-xl font-semibold">รายงานสรุปเรื่องร้องเรียน</h2><p class="text-sm mb-4" style="color:var(--mut)">${$('#r1').value} ถึง ${$('#r2').value}</p>
+ <div class="grid grid-cols-3 gap-3 mb-4 text-center"><div class="s0 rounded-2xl p-3"><div class="text-2xl font-semibold">${RL.length}</div>ทั้งหมด</div><div class="s3 rounded-2xl p-3"><div class="text-2xl font-semibold">${done.length}</div>เสร็จสิ้น (${RL.length?Math.round(done.length/RL.length*100):0}%)</div><div class="s2 rounded-2xl p-3"><div class="text-2xl font-semibold">${avg}</div>วันเฉลี่ยที่ใช้แก้</div></div>
+ <div class="grid sm:grid-cols-3 gap-4"><div><b>ตามสถานะ</b>${tb(ST,'status')}</div><div><b>ตามความเร่งด่วน</b>${tb(PR,'priority')}</div><div><b>ตามหมวดหมู่</b>${tb(CAT,'category')}</div></div>`}
+function xl(){const w=XLSX.utils.book_new(),m=(L,k)=>L.map(x=>({รายการ:x,จำนวน:RL.filter(c=>c[k]==x).length}));
+ XLSX.utils.book_append_sheet(w,XLSX.utils.json_to_sheet([...m(ST,'status'),...m(PR,'priority'),...m(CAT,'category')]),'สรุป');
+ XLSX.utils.book_append_sheet(w,XLSX.utils.json_to_sheet(RL.map(c=>({เลขที่:c.id,วันที่:dt(c.createdAt),หมวด:c.category,เร่งด่วน:c.priority,หัวข้อ:c.subject,รายละเอียด:c.detail,สถานที่:c.location,ผู้แจ้ง:c.reporter,สถานะ:c.status,ผู้รับผิดชอบ:c.assignee,ผลแก้ไข:c.resolution}))),'รายการ');
+ XLSX.writeFile(w,'complaint_report.xlsx')}
+
+/* ---------- USERS / SETTINGS ---------- */
+async function usrView(){const u=await run('users');$('#vw').innerHTML=`<div class="card p-4"><div class="flex justify-between mb-3"><b>👥 จัดการผู้ใช้งาน</b><button class="btn" onclick='uf({role:"handler",active:true})'>➕ เพิ่มผู้ใช้</button></div><div class="space-y-2">${u.map(x=>`<div class="flex flex-wrap justify-between items-center gap-2 p-3 rounded-2xl" style="background:var(--bg)"><div><b>${esc(x.name)}</b> <span class="text-sm" style="color:var(--mut)">@${esc(x.username)} • ${esc(x.email)} • เข้าล่าสุด ${dt(x.lastLogin)}</span></div><div class="flex gap-1 items-center"><span class="tag s${{admin:0,handler:1,viewer:2}[x.role]}">${x.role}</span>${x.active?'':'<span class="tag s0">ปิดใช้งาน</span>'}${x.lockUntil&&new Date(x.lockUntil)>new Date()?`<button class="btn !py-1" onclick="unl('${x.username}')">🔓 ปลดล็อก</button>`:''}<button class="btn btn2 !py-1" onclick='uf(${JSON.stringify(x)})'>แก้ไข</button></div></div>`).join('')}</div></div>`}
+function uf(x){const n=!x.username;$('#md').innerHTML=`<div class="modal"><div class="card p-5 max-w-md grid gap-2 fade"><b>${n?'เพิ่ม':'แก้ไข'}ผู้ใช้</b><input id="xu" class="in" placeholder="ชื่อผู้ใช้" value="${esc(x.username)}" ${n?'':'readonly'}><input id="xn" class="in" placeholder="ชื่อ-สกุล" value="${esc(x.name)}"><input id="xe" class="in" placeholder="อีเมล" value="${esc(x.email)}"><select id="xr" class="in">${['admin','handler','viewer'].map(r=>`<option ${x.role==r?'selected':''}>${r}</option>`).join('')}</select><input id="xp" type="password" class="in" placeholder="${n?'รหัสผ่าน (6+ ตัว)':'รหัสผ่านใหม่ (เว้นว่างถ้าไม่เปลี่ยน)'}"><label><input type="checkbox" id="xa" ${x.active?'checked':''}> เปิดใช้งาน</label><div class="flex gap-2"><button class="btn" onclick="us()">บันทึก</button><button class="btn btn2" onclick="$('#md').innerHTML=''">ยกเลิก</button></div><p class="text-xs" style="color:var(--mut)">admin = ทุกอย่าง • handler = อัปเดตเรื่อง • viewer = ดูอย่างเดียว</p></div></div>`}
+async function us(){try{await run('saveUser',{username:$('#xu').value,name:$('#xn').value,email:$('#xe').value,role:$('#xr').value,password:$('#xp').value,active:$('#xa').checked});$('#md').innerHTML='';toast('บันทึกแล้ว');usrView()}catch(e){toast(e)}}
+async function unl(u){await run('unlock',u);toast('ปลดล็อกแล้ว');usrView()}
+async function setView(){const s=await run('getSettings');$('#vw').innerHTML=`<div class="card p-5 max-w-2xl grid gap-3"><b>⚙️ การแจ้งเตือน</b><label>LINE Channel Access Token<input id="s1" class="in" value="${esc(s.LINE_TOKEN)}"></label><label>LINE User ID / Group ID ปลายทาง<input id="s2" class="in" value="${esc(s.LINE_TO)}"></label><label>อีเมลผู้รับแจ้งเตือน (คั่นด้วย ,)<input id="s3" class="in" value="${esc(s.EMAIL_TO)}"></label><div><button class="btn" onclick="ss()">💾 บันทึก</button></div></div>`}
+async function ss(){try{await run('saveSettings',{LINE_TOKEN:$('#s1').value,LINE_TO:$('#s2').value,EMAIL_TO:$('#s3').value});toast('บันทึกแล้ว ✅')}catch(e){toast(e)}}
+render();
+</script></body></html>
